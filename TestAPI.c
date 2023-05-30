@@ -90,7 +90,12 @@ void auto_test(uchar node)
 	tx_device = true;
 	memset(ReceiveBuffer, '\0', sizeof(ReceiveBuffer));
 
-	GetMicTxGain(0x01);
+	printf("\nFollow the on-screen instructions to complete the test.\n");
+	printf("Each instruction should be completed within five seconds.\n");
+	printf("To mute the sound, press the middle button\n");
+	printf("To change the Tx, press the first two buttons on the left\n");
+
+	GetMicTxGain(node);
 
 	if(ReadBytes <= 1 && Serial != INVALID_HANDLE_VALUE)
     {
@@ -115,89 +120,94 @@ void auto_test(uchar node)
 
     while(1)
     {
-        GetMicTxGain(0x01);
         if(ReadBytes == 5)
         {
             stash_Tx = ReceiveBuffer[4];
             break;
         }
+        GetMicTxGain(node);
 		Sleep(500);
 	}
 
 	printf("\nStart Auto Test ...  \n");
+	Sleep(500);
+			printf("> Please Connect Mic\r");
 
-	while(1)
-    {
-		switch(test_status)
-        {
-        case Connect:
-			printf("Please Connect Mic\r");
+	while (1)
+	{
+		switch (test_status)
+		{
+		case Connect:
 
-			GetMicConnectionStatus(0x01);
+			GetMicConnectionStatus(node);
 			Sleep(500);
-            time_count++;
+			time_count++;
 
-			if(!Empty(ReceiveBuffer,sizeof(ReceiveBuffer)) &&
-                (ReceiveBuffer[0] == EGetConnectStatus && ReceiveBuffer[4]))
-            {
-                time_count = 0;
-                test_status = Mute;
-				printf("\r");
-				printf("\n");
+			if (!Empty(ReceiveBuffer, sizeof(ReceiveBuffer)) &&
+				(ReceiveBuffer[0] == EGetConnectStatus && ReceiveBuffer[4]))
+			{
+				time_count = 0;
+				printf("\r                         ");
+				printf("\r--- Connect Test Succuss. ---\n");
+				printf("> Please Mute Mic.\n");
+				test_status = Mute;
+				Sleep(500);
 			}
-            if(time_count > 10)
-            {
+			if (time_count > 10)
+			{
 				result = false;
-            }
-            break;
-
-        case Mute:
-			printf("Please Mute Mic. ");
-
-            GetMicMuteStauts(0x01);
-			Sleep(500);
-            time_count++;
-
-            if(!Empty(ReceiveBuffer,sizeof(ReceiveBuffer)) &&
-                (ReceiveBuffer[0] == EGetMuteStatus && ReceiveBuffer[4]))
-            {
-                time_count = 0;
-                test_status = Tx;
-            }
-            if(time_count > 10)
-            {
-                result = false;
-            }
-            break;
-
-        case Tx:
-
-			printf("Please change Tx Gain. ");
-            GetMicTxGain(0x01);
-			Sleep(500);
-
-            time_count++;
-
-            if(!Empty(ReceiveBuffer,sizeof(ReceiveBuffer)) &&
-                (ReceiveBuffer[0] == EGetTxGain && ReceiveBuffer[4] != stash_Tx))
-            {
-                time_count = 0;
-				printf("Auto Test Succuss.");
-				return;
-            }
-            if(time_count > 10)
-            {
-                result = false;
-            }
-            break;
-
-        }
-
-        if(!result)
-        {
-			printf("Auto Test Fail.");
+			}
 			break;
-        }	
+
+		case Mute:
+
+			GetMicMuteStauts(node);
+			Sleep(500);
+			time_count++;
+
+			if (!Empty(ReceiveBuffer, sizeof(ReceiveBuffer)) &&
+				(ReceiveBuffer[0] == EGetMuteStatus && ReceiveBuffer[4]))
+			{
+				time_count = 0;
+				test_status = Tx;
+				printf("\r                           ");
+				printf("\r--- Mute Test Succuss. ---\n");
+				printf("> Please change Tx Gain.\n");
+				Sleep(500);
+			}
+			if (time_count > 10)
+			{
+				result = false;
+			}
+			break;
+
+		case Tx:
+
+			GetMicTxGain(node);
+			Sleep(500);
+
+			time_count++;
+
+			if (!Empty(ReceiveBuffer, sizeof(ReceiveBuffer)) &&
+				(ReceiveBuffer[0] == EGetTxGain && ReceiveBuffer[4] != stash_Tx))
+			{
+				time_count = 0;
+				printf("--- Auto Test Succuss. ---\n");
+				Sleep(500);
+				return;
+			}
+			if (time_count > 10)
+			{
+				result = false;
+			}
+			break;
+		}
+
+		if (!result)
+		{
+			printf("Auto Test Fail. \n");
+			break;
+		}
 	}
 }
 
@@ -265,12 +275,12 @@ void ReadCommand()
 		if(node == 1 && node1_connect_status != ReceiveBuffer[4])
 		{
 			node1_connect_status = ReceiveBuffer[4];
-			printf("Mic %d : %s", node, status);
+			printf("\nMic %d : %s", node, status);
 		}
 		if(node == 2 && node2_connect_status != ReceiveBuffer[4])
 		{
 			node2_connect_status = ReceiveBuffer[4];
-			printf("Mic %d : %s", node, status);
+			printf("\nMic %d : %s", node, status);
 		}
 
 		return;
@@ -292,8 +302,9 @@ void ReadCommand()
 		printf("Mic %d BD Address :\n", node);
 		for (int i = 4; i < ReadBytes; i++)
 		{
-			printf("%d ,\n", ReceiveBuffer[i]);
+			printf("%x ,", ReceiveBuffer[i]);
 		}
+		printf("\n");
 		break;
 
 	case EGetRXVolume:
@@ -301,7 +312,7 @@ void ReadCommand()
 		break;
 
 	case EGetFWversion:
-		printf("Mic %d FW Version : %d.%d\n", ReceiveBuffer[4], ReceiveBuffer[5]);
+		printf("Mic %d FW Version : %d.%d\n", ReceiveBuffer[3], ReceiveBuffer[4],ReceiveBuffer[5]);
 		break;
 
 	case EGetSOSstatus:

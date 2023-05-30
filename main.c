@@ -30,11 +30,15 @@ void *WatchStatusDog()
 }
 void *command()
 {
-    uchar cmd;
+    uchar cmd = 15;
     node = (uchar *)malloc(sizeof(uchar) * 1);
     *node = 1;
 
-    printf("Please Key the cmd:\n");
+    Sleep(1000);
+    flag = false;
+
+
+    printf("\n");
     printf("key 0: change the node.\n");
     printf("key 1: GetGet MIC Connection Status \n");
     printf("key 2: Get MIC Mute Status \n");
@@ -51,9 +55,9 @@ void *command()
     printf("key 13: Set SOS Signal \n");
     printf("key 14: Set SOS status \n");
     printf("key 15: Exit.\n");
-    Sleep(1000);
-    flag = false;
-    auto_test(0x01);
+    printf("key 100: Show command list.\n");
+    printf("key 101: Auto Test.\n");
+    Sleep(250);
     flag = true;
     while(1)
     {
@@ -111,7 +115,6 @@ void *command()
                 printf("Please enter RX Volume 0 ~ 10: \n");
                 scanf("%d", &value);
                 SetRxVolume(value);
-                printf("Send Over. \n");
                 break;
             case ESetSOSSignal:
                 printf("Please Set SOS Signal 0/1: \n");
@@ -122,14 +125,40 @@ void *command()
                 printf("Please Set SOS Signal 0/1: \n");
                 scanf("%d", &value);
                 SetSOSstatus(*node, value);
+            
+            case 100 + EGetConnectStatus - 1:
+                printf("\n");
+                printf("key 0: change the node.\n");
+                printf("key 1: GetGet MIC Connection Status \n");
+                printf("key 2: Get MIC Mute Status \n");
+                printf("key 3: Get MIC Battery Level \n");
+                printf("key 4: Get MIC TX Gain \n");
+                printf("key 5: Get MIC BD Address \n");
+                printf("key 6: Get RX Volume \n");
+                printf("key 7: Get SOS status \n");
+                printf("key 8: Get FW version \n");
+                printf("key 9: Send SOS Alarm \n");
+                printf("key 10: Set MIC Mute Status \n");
+                printf("key 11: Set MIC TX Gain \n");
+                printf("key 12: Set RX Volume \n");
+                printf("key 13: Set SOS Signal \n");
+                printf("key 14: Set SOS status \n");
+                printf("key 15: Exit.\n");
+                printf("key 100: Show command list.\n");
+                printf("key 101: Auto Test.\n");
+                break;
+            case 101 + EGetConnectStatus - 1:
+                auto_test(0x01);
+                break;
             default:
                 fprintf(stderr, "Exit.");
                 pthread_exit(&tid_mian);
                 pthread_exit(&tid_watchDog);
                 break;
             }
-        // printf("\n---------------------------------------\n");
+            // printf("\n---------------------------------------\n");
             pthread_mutex_unlock(&mutex);
+            cmd = 15;
     }
 }
 
