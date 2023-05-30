@@ -11,6 +11,12 @@ HANDLE Serial;
 DCB dcbSerialParams = {0};
 COMMTIMEOUTS timeouts = {0};
 
+uchar tx_device = 0;
+uchar first_detect_node1_connect = 0;
+uchar first_detect_node2_connect = 0;
+uchar node1_connect_status = 0;
+uchar node2_connect_status = 0;
+uchar user_command = 0;
 clock_t timer_start, timer_end;
 
 void SerialPortInit(const char port[])
@@ -74,6 +80,127 @@ void SerialPortInit(const char port[])
 	}
 	printf("\n");
 }
+
+void auto_test(uchar node)
+{
+    char time_count = 0;
+    AutoTest test_status = Connect;
+    int stash_Tx = 0;
+    char result = true;
+	tx_device = true;
+	memset(ReceiveBuffer, '\0', sizeof(ReceiveBuffer));
+
+	GetMicTxGain(0x01);
+
+	if(ReadBytes <= 1 && Serial != INVALID_HANDLE_VALUE)
+    {
+		tx_device = false;
+    }
+
+	if(!tx_device)
+    {
+        while(1)
+        {
+			ReadCommand();
+			if((Empty(ReceiveBuffer, sizeof(ReceiveBuffer)) && ReadBytes != 1))
+            {
+				continue;
+            }
+			if(ReceiveBuffer[0] == 0x35)
+            {
+                break;
+            }
+		}
+    }
+
+    while(1)
+    {
+        GetMicTxGain(0x01);
+        if(ReadBytes == 5)
+        {
+            stash_Tx = ReceiveBuffer[4];
+            break;
+        }
+		Sleep(500);
+	}
+
+	printf("\nStart Auto Test ...  \n");
+
+	while(1)
+    {
+		switch(test_status)
+        {
+        case Connect:
+			printf("Please Connect Mic\r");
+
+			GetMicConnectionStatus(0x01);
+			Sleep(500);
+            time_count++;
+
+			if(!Empty(ReceiveBuffer,sizeof(ReceiveBuffer)) &&
+                (ReceiveBuffer[0] == EGetConnectStatus && ReceiveBuffer[4]))
+            {
+                time_count = 0;
+                test_status = Mute;
+				printf("\r");
+				printf("\n");
+			}
+            if(time_count > 10)
+            {
+				result = false;
+            }
+            break;
+
+        case Mute:
+			printf("Please Mute Mic. ");
+
+            GetMicMuteStauts(0x01);
+			Sleep(500);
+            time_count++;
+
+            if(!Empty(ReceiveBuffer,sizeof(ReceiveBuffer)) &&
+                (ReceiveBuffer[0] == EGetMuteStatus && ReceiveBuffer[4]))
+            {
+                time_count = 0;
+                test_status = Tx;
+            }
+            if(time_count > 10)
+            {
+                result = false;
+            }
+            break;
+
+        case Tx:
+
+			printf("Please change Tx Gain. ");
+            GetMicTxGain(0x01);
+			Sleep(500);
+
+            time_count++;
+
+            if(!Empty(ReceiveBuffer,sizeof(ReceiveBuffer)) &&
+                (ReceiveBuffer[0] == EGetTxGain && ReceiveBuffer[4] != stash_Tx))
+            {
+                time_count = 0;
+				printf("Auto Test Succuss.");
+				return;
+            }
+            if(time_count > 10)
+            {
+                result = false;
+            }
+            break;
+
+        }
+
+        if(!result)
+        {
+			printf("Auto Test Fail.");
+			break;
+        }	
+	}
+}
+
 void Writecommand(uchar Opcode, uchar Length, uchar index, uchar Node, uchar Value)
 {
 	potocol.Opcode = Opcode;
@@ -115,50 +242,77 @@ void ReadCommand()
 	Opcode = ReceiveBuffer[0];
 	node = ReceiveBuffer[3];
 
-
 	switch(Opcode)
 	{
 	case EGetConnectStatus:
+		status = ReceiveBuffer[4] == 1 ? "Connect" : "disConnect";
+		if ((first_detect_node1_connect == 0 || first_detect_node2_connect == 0) || user_command == 1)
+		{
+			if(node == 1)
+			{
+				node1_connect_status = ReceiveBuffer[4];
+				first_detect_node1_connect = 1;
+			}
+			else
+			{
+				node2_connect_status = ReceiveBuffer[4];
+				first_detect_node2_connect = 1;
+			}
+			printf("Mic %d : %s\n", node, status);
+			user_command = 0;
+			return;
+		}
+		if(node == 1 && node1_connect_status != ReceiveBuffer[4])
+		{
+			node1_connect_status = ReceiveBuffer[4];
+			printf("Mic %d : %s", node, status);
+		}
+		if(node == 2 && node2_connect_status != ReceiveBuffer[4])
+		{
+			node2_connect_status = ReceiveBuffer[4];
+			printf("Mic %d : %s", node, status);
+		}
+
 		return;
 
 	case EGetMuteStatus:
 		status = ReceiveBuffer[4] == 1 ? "Mute" : "UnMute";
-		printf("Mic %d : %s", node, status);
+		printf("Mic %d : %s\n", node, status);
 		break;
 
 	case EGetBatteryLevel:
-		printf("Mic %d Battery : %d %%", node, ReceiveBuffer[4] * 25);
+		printf("Mic %d Battery : %d %%\n", node, ReceiveBuffer[4] * 25);
 		break;
 
 	case EGetTxGain:
-		printf("Mic %d Tx Gain : %d", node, ReceiveBuffer[4]);
+		printf("Mic %d Tx Gain : %d\n", node, ReceiveBuffer[4]);
 		break;
 
 	case EGetBDAddress:
 		printf("Mic %d BD Address :\n", node);
 		for (int i = 4; i < ReadBytes; i++)
 		{
-			printf("%d ,", ReceiveBuffer[i]);
+			printf("%d ,\n", ReceiveBuffer[i]);
 		}
 		break;
 
 	case EGetRXVolume:
-		printf("Mic RX Volume : %d", ReceiveBuffer[4]);
+		printf("Mic RX Volume : %d\n", ReceiveBuffer[4]);
 		break;
 
 	case EGetFWversion:
-		printf("Mic %d FW Version : %d.%d", ReceiveBuffer[4], ReceiveBuffer[5]);
+		printf("Mic %d FW Version : %d.%d\n", ReceiveBuffer[4], ReceiveBuffer[5]);
 		break;
 
 	case EGetSOSstatus:
-		printf("Mic %d SOS status : %d", node, ReceiveBuffer[4]);
+		printf("Mic %d SOS status : %d\n", node, ReceiveBuffer[4]);
 		break;
 	default:
-		printf("Unknow Opcode.");
+		printf(" Unknow Opcode.\n");
 		return;
 	}
-	printf("\n");
-	int mesc = ((timer_end - timer_start) * 1000) / CLOCKS_PER_SEC;
+		// printf("\n");
+		int mesc = ((timer_end - timer_start) * 1000) / CLOCKS_PER_SEC;
 	// printf("Time taken %d second %d millisecond. \n", mesc / 1000, mesc % 1000);
 }
 void TimeDelay(int time)
@@ -173,82 +327,94 @@ unsigned char GetMicConnectionStatus(uchar node)
 }
 unsigned char GetMicMuteStauts(uchar node)
 {
-	printf("--- Called Function: %s ---\n", __func__);
+	//printf("--- Called Function: %s ---\n", __func__);
 	Writecommand(READ, 0x02, 0x02, node, 0x00);
 	ReadCommand();
 }
 unsigned char GetMicBatteryLevel(uchar node)
 {
-	printf("--- Called Function: %s ---\n", __func__);
+	//printf("--- Called Function: %s ---\n", __func__);
 	Writecommand(READ, 0x02, 0x03, node, 0x00);
 	ReadCommand();
 }
 unsigned char GetMicTxGain(uchar node)
 {
-	printf("--- Called Function: %s ---\n", __func__);
+	//printf("--- Called Function: %s ---\n", __func__);
 	Writecommand(READ, 0x02, 0x04, node, 0x00);
 	ReadCommand();
 }
 unsigned char GetMicBDaddress(uchar node)
 {
-	printf("--- Called Function: %s ---\n", __func__);
+	//printf("--- Called Function: %s ---\n", __func__);
 	Writecommand(READ, 0x02, 0x05, node, 0x00);
 	ReadCommand();
 }
 unsigned char GetRxVolume()
 {
-	printf("--- Called Function: %s ---\n", __func__);
+	//printf("--- Called Function: %s ---\n", __func__);
 	Writecommand(READ, 0x02, 0x06, 0x00, 0x00);
 	ReadCommand();
 }
 unsigned char GetSOSstatus(uchar node)
 {
-	printf("--- Called Function: %s ---\n", __func__);
+	// printf("--- Called Function: %s ---\n", __func__);
 	Writecommand(READ, 0x02, 0x07, node, 0x00);
 	ReadCommand();
 }
 unsigned char GetFWversion(uchar node)
 {
-	printf("--- Called Function: %s ---\n", __func__);
+	//printf("--- Called Function: %s ---\n", __func__);
 	Writecommand(READ, 0x02, 0x08, node, 0x00);
 	ReadCommand();
 }
 
 void SendSOSAlarm()
 {
-	printf("--- Called Function: %s ---\n", __func__);
+	// printf("--- Called Function: %s ---\n", __func__);
 }
 void SetMicMuteStatus(uchar node, uchar mute)
 {
-	printf("--- Called Function: %s ---\n", __func__);
+	// printf("--- Called Function: %s ---\n", __func__);
 	Writecommand(Control, 0x03, 0x01, node, mute);
 	Sleep(500);
 	GetMicMuteStauts(node);
 }
 void SetMicTxGain(uchar node, uchar Gain)
 {
-	printf("--- Called Function: %s ---\n", __func__);
+	// printf("--- Called Function: %s ---\n", __func__);
 	Writecommand(Control, 0x03, 0x02, node, Gain);
 	Sleep(500);
 	GetMicTxGain(node);
 }
 void SetRxVolume(uchar Gain)
 {
-	printf("--- Called Function: %s ---\n", __func__);
+	// printf("--- Called Function: %s ---\n", __func__);
 	Writecommand(Control, 0x03, 0x03, 0x00, Gain);
 	Sleep(500);
 	GetRxVolume();
 }
 void SetSOSSignal(uchar node, uchar status)
 {
-	printf("--- Called Function: %s ---\n", __func__);
+	// printf("--- Called Function: %s ---\n", __func__);
 	Writecommand(Control, 0x03, 0x04, node, status);
 }
 
 void SetSOSstatus(uchar node, uchar status)
 {
-	printf("--- Called Function: %s ---\n", __func__);
+	// printf("--- Called Function: %s ---\n", __func__);
 	Writecommand(Control, 0x03, 0x04, node, status);
 	Sleep(500);
 	GetSOSstatus(node);
+}
+
+uchar Empty(uchar arr[],int size)
+{
+	for (int i = 0; i < sizeof(size);i++)
+	{
+		if(ReceiveBuffer[i] != 0)
+		{
+			return 0;
+		}
+	}
+	return 1;
 }
